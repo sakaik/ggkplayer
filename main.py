@@ -167,6 +167,8 @@ class MusicPlayer:
         self.root.bind("<space>", self.on_space_key)  # スペースキーのバインドを追加
         self.root.bind("<Left>", self.on_left_key)  # 左カーソルキーのバインドを追加
         self.root.bind("<Right>", self.on_right_key)  # 右カーソルキーのバインドを追加
+        self.root.bind("<Control-Left>", self.on_ctrl_left_key)  # Ctrl+左矢印のバインドを追加
+        self.root.bind("<Control-Right>", self.on_ctrl_right_key)  # Ctrl+右矢印のバインドを追加
         self.tree.bind("<Up>", self.on_up_key)
         self.tree.bind("<Down>", self.on_down_key)
         
@@ -204,7 +206,8 @@ class MusicPlayer:
                       padding=5, 
                       relief='flat',
                       background='#404040',  # 濃いグレー
-                      foreground='white')  # テキスト色を白に
+                      foreground='white',  # テキスト色を白に
+                      font=('', 12))  # フォントサイズを12に変更
         style.map('Icon.TButton',
                  background=[('active', '#505050')])  # ホバー時の色も少し明るく
         
@@ -265,7 +268,7 @@ class MusicPlayer:
                                     text="再生" if not self.play_icon else "",
                                     command=self.toggle_play,
                                     width=30)  # ボタンの幅を1.5倍に
-        self.play_button.pack(side=tk.LEFT, padx=15)
+        self.play_button.pack(side=tk.LEFT, padx=5)
         self.play_button.bind("<Enter>", lambda e: self.show_tooltip(e, "再生/一時停止"))
         self.play_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
@@ -303,7 +306,7 @@ class MusicPlayer:
         self.repeat_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
         # ツールチップ用のラベルを作成
-        self.tooltip = tk.Label(self.root, text="", background="#ffffe0", relief="solid", borderwidth=1)
+        self.tooltip = tk.Label(self.root, text="", background="#ffffe0", relief="solid", borderwidth=1, font=('', 12))
         self.tooltip.place_forget()  # 最初は非表示
     
     def toggle_repeat(self):
@@ -594,40 +597,46 @@ class MusicPlayer:
         # Deleteキーの処理
         selection = self.tree.selection()
         if selection:
-            selected_index = self.tree.index(selection[0])
-            
-            # 選択された曲が現在再生中の曲の場合
-            if selected_index == self.current_track:
-                # 再生を停止
-                pygame.mixer.music.stop()
-                self.play_button.config(text="再生")
-                self.current_track = 0  # 最初の曲を選択
-            
-            # 曲をプレイリストから削除
-            self.tree.delete(selected_index)  # 選択されたアイテムのIDを使用
-            del self.playlist[selected_index]
-            
-            # 現在の再生位置を更新
-            if self.current_track >= len(self.playlist):
-                self.current_track = max(0, len(self.playlist) - 1)
-            
-            # プレイリストが空になった場合
-            if not self.playlist:
-                self.current_track = 0
-                self.current_track_length = 0
-                self.current_position = 0  # 再生位置をリセット
-                self.progress_var.set(0)
-                self.current_time_label.config(text="00:00")
-                self.total_time_label.config(text="00:00")
-                self.current_track_label.config(text="再生中の曲: ")
-            else:
-                # 削除された曲の次の曲を選択（最後の曲の場合は新たな最後の曲を選択）
-                next_index = min(selected_index, len(self.playlist) - 1)
-                next_item = self.tree.get_children()[next_index]
-                self.tree.selection_set(next_item)
-                self.tree.focus(next_item)  # フォーカスを設定
-                self.tree.see(next_item)  # 選択されたアイテムが見えるようにスクロール
-            self.update_playing_mark()  # 再生中マークを更新
+            try:
+                selected_index = self.tree.index(selection[0])
+                
+                # 選択された曲が現在再生中の曲の場合
+                if selected_index == self.current_track:
+                    # 再生を停止
+                    pygame.mixer.music.stop()
+                    self.play_button.config(text="再生")
+                    self.current_track = 0  # 最初の曲を選択
+                
+                # 曲をプレイリストから削除
+                self.tree.delete(selected_index)  # 選択されたアイテムのIDを使用
+                del self.playlist[selected_index]
+                
+                # 現在の再生位置を更新
+                if self.current_track >= len(self.playlist):
+                    self.current_track = max(0, len(self.playlist) - 1)
+                
+                # プレイリストが空になった場合
+                if not self.playlist:
+                    self.current_track = 0
+                    self.current_track_length = 0
+                    self.current_position = 0  # 再生位置をリセット
+                    self.progress_var.set(0)
+                    self.current_time_label.config(text="00:00")
+                    self.total_time_label.config(text="00:00")
+                    self.current_track_label.config(text="再生中の曲: ")
+                else:
+                    # 削除された曲の次の曲を選択（最後の曲の場合は新たな最後の曲を選択）
+                    next_index = min(selected_index, len(self.playlist) - 1)
+                    if next_index >= 0:  # インデックスが有効な場合のみ
+                        next_item = self.tree.get_children()[next_index]
+                        self.tree.selection_set(next_item)
+                        self.tree.focus(next_item)  # フォーカスを設定
+                        self.tree.see(next_item)  # 選択されたアイテムが見えるようにスクロール
+                self.update_playing_mark()  # 再生中マークを更新
+            except Exception as e:
+                print(f"曲の削除中にエラーが発生しました: {e}")
+                # エラーが発生した場合は、プレイリストをクリアして再構築
+                self.clear_playlist()
     
     def on_up_key(self, event):
         # 上矢印キーの処理
@@ -673,6 +682,14 @@ class MusicPlayer:
 
     def on_right_key(self, event):
         self.forward(5)  # 5秒進め
+        return "break"  # イベントの伝播を停止
+
+    def on_ctrl_left_key(self, event):
+        self.rewind(10)  # 10秒戻し
+        return "break"  # イベントの伝播を停止
+
+    def on_ctrl_right_key(self, event):
+        self.forward(10)  # 10秒進め
         return "break"  # イベントの伝播を停止
     
     def __del__(self):
