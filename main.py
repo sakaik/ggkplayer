@@ -7,12 +7,26 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import pyaudio
 import time
 import traceback
+import configparser
 
 class MusicPlayer:
     def __init__(self, root):
         self.root = root
         self.root.title("シンプル音楽プレイヤー")
-        self.root.geometry("800x600")
+        
+        # 設定ファイルの読み込み
+        self.config = configparser.ConfigParser()
+        self.config_file = "settings.ini"
+        self.load_settings()
+        
+        # ウィンドウサイズを設定
+        try:
+            width = int(self.config['Window']['width'])
+            height = int(self.config['Window']['height'])
+            self.root.geometry(f"{width}x{height}")
+        except Exception as e:
+            print(f"ウィンドウサイズの設定中にエラーが発生しました: {e}")
+            self.root.geometry("800x600")
         
         # 音楽プレイヤーの初期化
         pygame.mixer.init()
@@ -36,6 +50,7 @@ class MusicPlayer:
         self.root.dnd_bind('<<Drop>>', self.drop_files)
         
         self.create_widgets()
+        self.set_audio_device()  # 保存された設定を適用
         self.update_audio_device_info()
         
         # プログレスバーの更新用タイマー
@@ -66,9 +81,22 @@ class MusicPlayer:
         self.device_var = tk.StringVar()
         self.device_combo = ttk.Combobox(device_frame, textvariable=self.device_var, state="readonly", width=50)
         self.device_combo['values'] = [name for _, name in self.audio_devices]
-        self.device_combo.current(self.current_device_index)
         self.device_combo.pack(side=tk.LEFT, padx=5)
         self.device_combo.bind('<<ComboboxSelected>>', self.on_device_change)
+        
+        # 保存されたデバイス名を取得して設定
+        try:
+            saved_device_name = self.config['Audio']['device_name']
+            if saved_device_name:  # デバイス名が指定されている場合
+                for i, (_, device_name) in enumerate(self.audio_devices):
+                    if device_name == saved_device_name:
+                        self.device_combo.current(i)
+                        self.current_device_index = i
+                        print(f"保存されたデバイスを設定しました: {saved_device_name}")
+                        break
+        except Exception as e:
+            print(f"保存されたデバイスの設定中にエラーが発生しました: {e}")
+            self.device_combo.current(self.current_device_index)
         
         # デバイス情報を表示するラベル
         self.device_info_label = tk.Label(self.status_frame, text="", anchor=tk.W)
@@ -92,6 +120,19 @@ class MusicPlayer:
                        background="#404040", 
                        width=20)  # 再生中マーク用の列のスタイル
         
+        # 保存されたカラム幅を設定
+        try:
+            track_width = int(self.config['Columns']['track_width'])
+            title_width = int(self.config['Columns']['title_width'])
+            artist_width = int(self.config['Columns']['artist_width'])
+            duration_width = int(self.config['Columns']['duration_width'])
+        except Exception as e:
+            print(f"カラム幅の設定中にエラーが発生しました: {e}")
+            track_width = 30
+            title_width = 400
+            artist_width = 200
+            duration_width = 70
+        
         # プレイリスト表示用のTreeview
         self.tree = ttk.Treeview(self.root, columns=("playing", "track", "title", "artist", "duration"), show="headings", style="Treeview")
         self.tree.heading("playing", text="")  # 再生中マーク用の列
@@ -100,10 +141,10 @@ class MusicPlayer:
         self.tree.heading("artist", text="アーティスト")
         self.tree.heading("duration", text="Time")  # 「再生時間」を「Time」に変更
         self.tree.column("playing", width=20, anchor="center", stretch=False)  # 再生中マーク用の列
-        self.tree.column("track", width=30, anchor="e", stretch=False)  # 固定幅
-        self.tree.column("title", width=400, stretch=True)  # 伸縮可能
-        self.tree.column("artist", width=200, stretch=True)  # 伸縮可能
-        self.tree.column("duration", width=70, anchor="e", stretch=False)  # 固定幅で右端に配置
+        self.tree.column("track", width=track_width, anchor="e", stretch=False)  # 固定幅
+        self.tree.column("title", width=title_width, stretch=True)  # 伸縮可能
+        self.tree.column("artist", width=artist_width, stretch=True)  # 伸縮可能
+        self.tree.column("duration", width=duration_width, anchor="e", stretch=False)  # 固定幅で右端に配置
         self.tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # ダブルクリックイベントの設定
@@ -458,7 +499,7 @@ class MusicPlayer:
                 self.current_track = 0  # 最初の曲を選択
             
             # 曲をプレイリストから削除
-            self.tree.delete(selection[0])  # 選択されたアイテムのIDを使用
+            self.tree.delete(selected_index)  # 選択されたアイテムのIDを使用
             del self.playlist[selected_index]
             
             # 現在の再生位置を更新
@@ -534,7 +575,79 @@ class MusicPlayer:
         if hasattr(self, 'p'):
             self.p.terminate()
 
+    def load_settings(self):
+        """設定ファイルを読み込む"""
+        if os.path.exists(self.config_file):
+            self.config.read(self.config_file, encoding='utf-8')
+        else:
+            # デフォルト設定
+            self.config['Audio'] = {'device_name': ''}  # 空文字列はデフォルトデバイスを意味する
+            self.config['Window'] = {'width': '800', 'height': '600'}
+            self.config['Columns'] = {
+                'track_width': '30',
+                'title_width': '400',
+                'artist_width': '200',
+                'duration_width': '70'
+            }
+            self.save_settings()
+
+    def save_settings(self):
+        """設定をファイルに保存する"""
+        with open(self.config_file, 'w', encoding='utf-8') as f:
+            self.config.write(f)
+
+    def set_audio_device(self):
+        """保存された再生デバイスを設定する"""
+        try:
+            saved_device_name = self.config['Audio']['device_name']
+            if saved_device_name:  # デバイス名が指定されている場合
+                devices = self.get_audio_devices()
+                # デバイス名に一致するデバイスを探す
+                for device_id, device_name in devices:
+                    if device_name == saved_device_name:
+                        pygame.mixer.quit()
+                        pygame.mixer.init(devicename=device_name)
+                        self.current_device_index = device_id
+                        self.device_var.set(device_name)
+                        print(f"再生デバイスを設定しました: {device_name}")
+                        return
+                print("保存されたデバイスが見つかりません。デフォルトデバイスを使用します。")
+            else:
+                print("デフォルトデバイスを使用します。")
+            pygame.mixer.quit()
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"デバイス設定中にエラーが発生しました: {e}")
+            print("デフォルトデバイスを使用します。")
+            pygame.mixer.quit()
+            pygame.mixer.init()
+
+    def on_closing(self):
+        """ウィンドウを閉じる時の処理"""
+        # 現在の再生デバイス名を保存
+        try:
+            current_device_name = self.device_var.get()
+            self.config['Audio']['device_name'] = current_device_name
+            
+            # ウィンドウサイズを保存
+            self.config['Window']['width'] = str(self.root.winfo_width())
+            self.config['Window']['height'] = str(self.root.winfo_height())
+            
+            # カラム幅を保存
+            self.config['Columns']['track_width'] = str(self.tree.column("track", "width"))
+            self.config['Columns']['title_width'] = str(self.tree.column("title", "width"))
+            self.config['Columns']['artist_width'] = str(self.tree.column("artist", "width"))
+            self.config['Columns']['duration_width'] = str(self.tree.column("duration", "width"))
+            
+            self.save_settings()
+        except Exception as e:
+            print(f"設定の保存中にエラーが発生しました: {e}")
+        
+        pygame.mixer.quit()
+        self.root.destroy()
+
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
     app = MusicPlayer(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)  # ウィンドウを閉じる時の処理を設定
     root.mainloop() 
