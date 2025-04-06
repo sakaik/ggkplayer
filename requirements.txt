@@ -1,4 +1,6 @@
 pygame==2.5.2
+pyaudio==0.2.14
 mutagen==1.47.0
 tkinterdnd2==0.3.0
-pyaudio==0.2.13 
+Pillow>=10.0.0
+PyQt5==5.15.10 

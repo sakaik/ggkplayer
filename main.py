@@ -3,11 +3,17 @@ from tkinter import ttk, filedialog, messagebox
 import pygame
 import os
 from mutagen.mp3 import MP3
+from mutagen.id3 import ID3
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import pyaudio
 import time
 import traceback
 import configparser
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtSvg import QSvgRenderer
+from PyQt5.QtCore import QByteArray, Qt
+from PyQt5.QtGui import QPixmap, QPainter, QImage
 
 class MusicPlayer:
     def __init__(self, root):
@@ -48,6 +54,11 @@ class MusicPlayer:
         # ドラッグ&ドロップの設定
         self.root.drop_target_register(DND_FILES)
         self.root.dnd_bind('<<Drop>>', self.drop_files)
+        
+        # Qt5の初期化
+        self.qt_app = QApplication.instance()
+        if not self.qt_app:
+            self.qt_app = QApplication([])
         
         self.create_widgets()
         self.set_audio_device()  # 保存された設定を適用
@@ -187,35 +198,124 @@ class MusicPlayer:
         control_frame = tk.Frame(self.root)
         control_frame.pack(pady=10)
         
+        # ボタンのスタイルを設定
+        style = ttk.Style()
+        style.configure('Icon.TButton', 
+                      padding=5, 
+                      relief='flat',
+                      background='#404040',  # 濃いグレー
+                      foreground='white')  # テキスト色を白に
+        style.map('Icon.TButton',
+                 background=[('active', '#505050')])  # ホバー時の色も少し明るく
+        
+        # アイコンの読み込み
+        try:
+            # SVGファイルを読み込んでアイコンとして使用
+            self.prev_icon = self.load_svg_to_photoimage("icons/prev.svg")
+            self.rewind_10_icon = self.load_svg_to_photoimage("icons/rewind_10.svg")
+            self.rewind_5_icon = self.load_svg_to_photoimage("icons/rewind_5.svg")
+            self.play_icon = self.load_svg_to_photoimage("icons/play.svg")
+            self.pause_icon = self.load_svg_to_photoimage("icons/pause.svg")
+            self.forward_5_icon = self.load_svg_to_photoimage("icons/forward_5.svg")
+            self.forward_10_icon = self.load_svg_to_photoimage("icons/forward_10.svg")
+            self.next_icon = self.load_svg_to_photoimage("icons/next.svg")
+            self.repeat_off_icon = self.load_svg_to_photoimage("icons/repeat_off.svg")
+            self.repeat_on_icon = self.load_svg_to_photoimage("icons/repeat_on.svg")
+        except Exception as e:
+            # アイコンが読み込めない場合はテキストボタンを使用
+            self.prev_icon = None
+            self.rewind_10_icon = None
+            self.rewind_5_icon = None
+            self.play_icon = None
+            self.pause_icon = None
+            self.forward_5_icon = None
+            self.forward_10_icon = None
+            self.next_icon = None
+            self.repeat_off_icon = None
+            self.repeat_on_icon = None
+        
         # ボタンの作成
-        self.prev_button = tk.Button(control_frame, text="前の曲", command=self.prev_track, width=10, height=2)
+        self.prev_button = ttk.Button(control_frame, style='Icon.TButton', 
+                                    image=self.prev_icon if self.prev_icon else None,
+                                    text="前の曲" if not self.prev_icon else "",
+                                    command=self.prev_track)
         self.prev_button.pack(side=tk.LEFT, padx=5)
+        self.prev_button.bind("<Enter>", lambda e: self.show_tooltip(e, "前の曲"))
+        self.prev_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
-        self.rewind_10_button = tk.Button(control_frame, text="10秒戻し", command=lambda: self.rewind(10), width=10, height=2)
+        self.rewind_10_button = ttk.Button(control_frame, style='Icon.TButton',
+                                         image=self.rewind_10_icon if self.rewind_10_icon else None,
+                                         text="10秒戻し" if not self.rewind_10_icon else "",
+                                         command=lambda: self.rewind(10))
         self.rewind_10_button.pack(side=tk.LEFT, padx=5)
+        self.rewind_10_button.bind("<Enter>", lambda e: self.show_tooltip(e, "10秒戻し"))
+        self.rewind_10_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
-        self.rewind_5_button = tk.Button(control_frame, text="5秒戻し", command=lambda: self.rewind(5), width=10, height=2)
+        self.rewind_5_button = ttk.Button(control_frame, style='Icon.TButton',
+                                        image=self.rewind_5_icon if self.rewind_5_icon else None,
+                                        text="5秒戻し" if not self.rewind_5_icon else "",
+                                        command=lambda: self.rewind(5))
         self.rewind_5_button.pack(side=tk.LEFT, padx=5)
+        self.rewind_5_button.bind("<Enter>", lambda e: self.show_tooltip(e, "5秒戻し"))
+        self.rewind_5_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
-        self.play_button = tk.Button(control_frame, text="再生", command=self.toggle_play, width=10, height=2)
-        self.play_button.pack(side=tk.LEFT, padx=5)
+        # 再生ボタン
+        self.play_button = ttk.Button(control_frame, style='Icon.TButton',
+                                    image=self.play_icon if self.play_icon else None,
+                                    text="再生" if not self.play_icon else "",
+                                    command=self.toggle_play,
+                                    width=30)  # ボタンの幅を1.5倍に
+        self.play_button.pack(side=tk.LEFT, padx=15)
+        self.play_button.bind("<Enter>", lambda e: self.show_tooltip(e, "再生/一時停止"))
+        self.play_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
-        self.forward_5_button = tk.Button(control_frame, text="5秒進め", command=lambda: self.forward(5), width=10, height=2)
+        self.forward_5_button = ttk.Button(control_frame, style='Icon.TButton',
+                                         image=self.forward_5_icon if self.forward_5_icon else None,
+                                         text="5秒進め" if not self.forward_5_icon else "",
+                                         command=lambda: self.forward(5))
         self.forward_5_button.pack(side=tk.LEFT, padx=5)
+        self.forward_5_button.bind("<Enter>", lambda e: self.show_tooltip(e, "5秒進め"))
+        self.forward_5_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
-        self.forward_10_button = tk.Button(control_frame, text="10秒進め", command=lambda: self.forward(10), width=10, height=2)
+        self.forward_10_button = ttk.Button(control_frame, style='Icon.TButton',
+                                          image=self.forward_10_icon if self.forward_10_icon else None,
+                                          text="10秒進め" if not self.forward_10_icon else "",
+                                          command=lambda: self.forward(10))
         self.forward_10_button.pack(side=tk.LEFT, padx=5)
+        self.forward_10_button.bind("<Enter>", lambda e: self.show_tooltip(e, "10秒進め"))
+        self.forward_10_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
-        self.next_button = tk.Button(control_frame, text="次の曲", command=self.next_track, width=10, height=2)
+        self.next_button = ttk.Button(control_frame, style='Icon.TButton',
+                                    image=self.next_icon if self.next_icon else None,
+                                    text="次の曲" if not self.next_icon else "",
+                                    command=self.next_track)
         self.next_button.pack(side=tk.LEFT, padx=5)
+        self.next_button.bind("<Enter>", lambda e: self.show_tooltip(e, "次の曲"))
+        self.next_button.bind("<Leave>", lambda e: self.hide_tooltip())
         
         # リピートボタン
-        self.repeat_button = tk.Button(control_frame, text="リピート: OFF", command=self.toggle_repeat, width=10, height=2)
+        self.repeat_button = ttk.Button(control_frame, style='Icon.TButton',
+                                      image=self.repeat_off_icon if self.repeat_off_icon else None,
+                                      text="リピート: OFF" if not self.repeat_off_icon else "",
+                                      command=self.toggle_repeat)
         self.repeat_button.pack(side=tk.LEFT, padx=5)
+        self.repeat_button.bind("<Enter>", lambda e: self.show_tooltip(e, "リピート: OFF"))
+        self.repeat_button.bind("<Leave>", lambda e: self.hide_tooltip())
+        
+        # ツールチップ用のラベルを作成
+        self.tooltip = tk.Label(self.root, text="", background="#ffffe0", relief="solid", borderwidth=1)
+        self.tooltip.place_forget()  # 最初は非表示
     
     def toggle_repeat(self):
         self.repeat_track = not self.repeat_track
-        self.repeat_button.config(text=f"リピート: {'ON' if self.repeat_track else 'OFF'}")
+        if self.repeat_on_icon and self.repeat_off_icon:
+            self.repeat_button.configure(
+                image=self.repeat_on_icon if self.repeat_track else self.repeat_off_icon
+            )
+        else:
+            self.repeat_button.configure(
+                text=f"リピート: {'ON' if self.repeat_track else 'OFF'}"
+            )
     
     def forward(self, seconds):
         if pygame.mixer.music.get_busy():
@@ -436,10 +536,12 @@ class MusicPlayer:
             self.update_playing_mark()  # 再生中マークを更新
     
     def toggle_play(self):
-        print(f"再生/一時停止切り替え (再生状態: {'一時停止中' if self.is_paused else '再生中' if pygame.mixer.music.get_busy() else '停止中'})")
         if pygame.mixer.music.get_busy():
             pygame.mixer.music.pause()
-            self.play_button.config(text="再生")
+            if self.play_icon:
+                self.play_button.configure(image=self.play_icon)
+            else:
+                self.play_button.configure(text="再生")
             self.is_paused = True
         else:
             if self.is_paused:
@@ -448,7 +550,10 @@ class MusicPlayer:
             else:
                 if self.playlist:
                     self.play_track()
-            self.play_button.config(text="一時停止")
+            if self.pause_icon:
+                self.play_button.configure(image=self.pause_icon)
+            else:
+                self.play_button.configure(text="一時停止")
             self.is_paused = False
     
     def next_track(self):
@@ -645,6 +750,64 @@ class MusicPlayer:
         
         pygame.mixer.quit()
         self.root.destroy()
+
+    def create_text_icon(self, text):
+        """テキストを使用したアイコンを作成する"""
+        width = 24
+        height = 24
+        image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.truetype("arial.ttf", 20)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        x = (width - text_width) // 2
+        y = (height - text_height) // 2
+        draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+        return ImageTk.PhotoImage(image)
+
+    def load_svg_to_photoimage(self, svg_path, width=32, height=32):
+        """SVGファイルをPhotoImageに変換する"""
+        try:
+            # SVGファイルを読み込む
+            with open(svg_path, 'rb') as f:
+                svg_data = f.read()
+            
+            # SVGレンダラーを作成
+            renderer = QSvgRenderer(QByteArray(svg_data))
+            
+            # QImageを作成してSVGを描画
+            image = QImage(width, height, QImage.Format_ARGB32)
+            image.fill(Qt.transparent)
+            painter = QPainter(image)
+            renderer.render(painter)
+            painter.end()
+            
+            # QImageをPIL Imageに変換
+            image_data = image.constBits().asstring(image.byteCount())
+            pil_image = Image.frombuffer('RGBA', (width, height), image_data, 'raw', 'BGRA')
+            
+            # PIL ImageをPhotoImageに変換
+            photo_image = ImageTk.PhotoImage(pil_image)
+            return photo_image
+        except Exception as e:
+            return None
+
+    def show_tooltip(self, event, text):
+        """ツールチップを表示する"""
+        # ツールチップの位置を計算
+        x = event.widget.winfo_rootx() + event.widget.winfo_width() + 5
+        y = event.widget.winfo_rooty() + (event.widget.winfo_height() - self.tooltip.winfo_height()) // 2
+        
+        # ツールチップのテキストと位置を設定
+        self.tooltip.config(text=text)
+        self.tooltip.update_idletasks()  # サイズを更新
+        self.tooltip.place(x=x, y=y)
+        self.tooltip.lift()  # 最前面に表示
+
+    def hide_tooltip(self):
+        """ツールチップを非表示にする"""
+        self.tooltip.place_forget()
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
