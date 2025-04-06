@@ -1,0 +1,4 @@
+pygame==2.5.2
+mutagen==1.47.0
+tkinterdnd2==0.3.0
+pyaudio==0.2.13 
