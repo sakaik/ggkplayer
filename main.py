@@ -67,6 +67,9 @@ class MusicPlayer:
         # プログレスバーの更新用タイマー
         self.update_progress()
         
+        # プレイリストの復元（最後に実行）
+        self.restore_playlist()
+        
     def get_audio_devices(self):
         devices = []
         for i in range(self.p.get_device_count()):
@@ -608,7 +611,7 @@ class MusicPlayer:
                     self.current_track = 0  # 最初の曲を選択
                 
                 # 曲をプレイリストから削除
-                self.tree.delete(selected_index)  # 選択されたアイテムのIDを使用
+                self.tree.delete(selection[0])  # 選択されたアイテムのIDを使用
                 del self.playlist[selected_index]
                 
                 # 現在の再生位置を更新
@@ -635,8 +638,7 @@ class MusicPlayer:
                 self.update_playing_mark()  # 再生中マークを更新
             except Exception as e:
                 print(f"曲の削除中にエラーが発生しました: {e}")
-                # エラーが発生した場合は、プレイリストをクリアして再構築
-                self.clear_playlist()
+                # エラーが発生した場合は、何もしない（1件ずつの削除に徹する）
     
     def on_up_key(self, event):
         # 上矢印キーの処理
@@ -711,10 +713,24 @@ class MusicPlayer:
                 'artist_width': '200',
                 'duration_width': '70'
             }
+            self.config['Playlist'] = {}  # プレイリスト用のセクションを追加
             self.save_settings()
+
+    def restore_playlist(self):
+        """プレイリストを復元する"""
+        if 'Playlist' in self.config:
+            for key in self.config['Playlist']:
+                file_path = self.config['Playlist'][key]
+                if os.path.exists(file_path):  # ファイルが存在する場合のみ追加
+                    self.add_to_playlist(file_path)
 
     def save_settings(self):
         """設定をファイルに保存する"""
+        # プレイリストの保存
+        self.config['Playlist'] = {}  # プレイリストセクションをクリア
+        for i, file_path in enumerate(self.playlist):
+            self.config['Playlist'][f'item_{i}'] = file_path
+        
         with open(self.config_file, 'w', encoding='utf-8') as f:
             self.config.write(f)
 
@@ -825,6 +841,32 @@ class MusicPlayer:
     def hide_tooltip(self):
         """ツールチップを非表示にする"""
         self.tooltip.place_forget()
+
+    def clear_playlist(self):
+        """プレイリストをクリアする"""
+        # 再生を停止
+        pygame.mixer.music.stop()
+        self.play_button.config(text="再生")
+        self.is_paused = True
+        
+        # プレイリストをクリア
+        self.playlist.clear()
+        self.current_track = 0
+        self.current_track_length = 0
+        self.current_position = 0
+        self.progress_var.set(0)
+        self.current_time_label.config(text="00:00")
+        self.total_time_label.config(text="00:00")
+        self.current_track_label.config(text="再生中の曲: ")
+        
+        # Treeviewをクリア
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        # 設定ファイルのプレイリストセクションもクリア
+        if 'Playlist' in self.config:
+            self.config['Playlist'] = {}
+            self.save_settings()
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()
