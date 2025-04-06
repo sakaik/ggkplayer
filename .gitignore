@@ -37,5 +37,5 @@ venv*/
 Thumbs.db 
 
 # exec
-src/settings.ini
+*/settings.ini
 *.spec
