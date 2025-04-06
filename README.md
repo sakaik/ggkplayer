@@ -1,8 +1,9 @@
 # シンプルmp3プレイヤー　ggkPlayer
 
 シンプルな音楽プレイヤーアプリケーションです。
+
 AIエディタ Cursor の試用試用の第2弾です。
-PythonとTkinterを使用ています。
+PythonとTkinterを使用しています。
 
 ## 機能
 
