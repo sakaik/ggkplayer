@@ -14,15 +14,27 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtSvg import QSvgRenderer
 from PyQt5.QtCore import QByteArray, Qt
 from PyQt5.QtGui import QPixmap, QPainter, QImage
+import json
+import sys
 
 class MusicPlayer:
     def __init__(self, root):
         self.root = root
         self.root.title("シンプル音楽プレイヤー")
         
+        # 実行ファイルのパスを取得
+        if getattr(sys, 'frozen', False):
+            # PyInstallerでビルドされた場合
+            self.base_path = os.path.dirname(sys.executable)
+        else:
+            # 通常のPythonスクリプトとして実行された場合
+            self.base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # 設定ファイルのパスを設定
+        self.config_file = os.path.join(self.base_path, "settings.ini")
+        
         # 設定ファイルの読み込み
         self.config = configparser.ConfigParser()
-        self.config_file = "settings.ini"
         self.load_settings()
         
         # ウィンドウサイズを設定
@@ -611,7 +623,7 @@ class MusicPlayer:
                     self.current_track = 0  # 最初の曲を選択
                 
                 # 曲をプレイリストから削除
-                self.tree.delete(selection[0])  # 選択されたアイテムのIDを使用
+                self.tree.delete(selected_index)  # 選択されたアイテムのIDを使用
                 del self.playlist[selected_index]
                 
                 # 現在の再生位置を更新
@@ -714,7 +726,6 @@ class MusicPlayer:
                 'duration_width': '70'
             }
             self.config['Playlist'] = {}  # プレイリスト用のセクションを追加
-            self.save_settings()
 
     def restore_playlist(self):
         """プレイリストを復元する"""
@@ -802,8 +813,16 @@ class MusicPlayer:
     def load_svg_to_photoimage(self, svg_path, width=32, height=32):
         """SVGファイルをPhotoImageに変換する"""
         try:
+            # 実行環境に応じてアイコンファイルのパスを設定
+            if getattr(sys, 'frozen', False):
+                # PyInstallerでビルドされた場合
+                icon_path = os.path.join(sys._MEIPASS, svg_path)
+            else:
+                # 通常のPythonスクリプトとして実行された場合
+                icon_path = os.path.join(self.base_path, svg_path)
+            
             # SVGファイルを読み込む
-            with open(svg_path, 'rb') as f:
+            with open(icon_path, 'rb') as f:
                 svg_data = f.read()
             
             # SVGレンダラーを作成
@@ -824,6 +843,7 @@ class MusicPlayer:
             photo_image = ImageTk.PhotoImage(pil_image)
             return photo_image
         except Exception as e:
+            print(f"アイコンの読み込みに失敗しました: {e}")
             return None
 
     def show_tooltip(self, event, text):
