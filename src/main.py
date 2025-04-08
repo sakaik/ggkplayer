@@ -325,6 +325,9 @@ class MusicPlayer:
         self.tooltip.place_forget()  # 最初は非表示
     
     def toggle_repeat(self):
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
         self.repeat_track = not self.repeat_track
         if self.repeat_on_icon and self.repeat_off_icon:
             self.repeat_button.configure(
@@ -336,12 +339,18 @@ class MusicPlayer:
             )
     
     def forward(self, seconds):
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
         if pygame.mixer.music.get_busy():
             self.current_position = min(self.current_track_length, self.current_position + seconds)
             pygame.mixer.music.set_pos(self.current_position)
             self.last_update_time = time.time()
     
     def rewind(self, seconds):
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
         if pygame.mixer.music.get_busy():
             self.current_position = max(0, self.current_position - seconds)
             pygame.mixer.music.set_pos(self.current_position)
@@ -396,9 +405,7 @@ class MusicPlayer:
                 self.current_time_label.config(text=self.format_time(self.current_position))
             
             # 曲が終了した場合
-            #print(f"Debug:{self.current_position}/{self.current_track_length} {self.current_position >= self.current_track_length }: {pygame.mixer.music.get_busy()}")
-            # if self.current_position >= self.current_track_length and self.playlist and pygame.mixer.music.get_busy():  # 再生中の場合のみ次の曲へ
-            if self.current_position >= self.current_track_length and self.playlist :  # 再生中の場合のみ次の曲へ
+            if self.current_position >= self.current_track_length and self.playlist:  # 再生中の場合のみ次の曲へ
                 print(f"曲の再生が終了しました (再生状態: {'一時停止中' if self.is_paused else '再生中' if pygame.mixer.music.get_busy() else '停止中'})")
                 if self.repeat_track:
                     print("リピートモード: 同じ曲を先頭から再生します")
@@ -522,135 +529,171 @@ class MusicPlayer:
             self.play_track()
     
     def play_track(self):
-        print(f"再生開始: インデックス {self.current_track} (再生状態: {'一時停止中' if self.is_paused else '再生中' if pygame.mixer.music.get_busy() else '停止中'})")
-        if self.playlist:
-            self.is_paused = False
+        """選択された曲を再生"""
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
+        try:
+            # 再生を開始
             pygame.mixer.music.load(self.playlist[self.current_track])
             pygame.mixer.music.play()
-            self.play_button.config(text="一時停止")
-            
-            # 曲の長さを取得
-            try:
-                audio = MP3(self.playlist[self.current_track])
-                self.current_track_length = audio.info.length
-                self.total_time_label.config(text=self.format_time(self.current_track_length))
-                
-                # 曲名を更新
-                title = audio.get('TIT2', [os.path.basename(self.playlist[self.current_track])])[0]
-                self.current_track_label.config(text=f"再生中の曲: {title}")
-                print(f"再生曲情報: {title} (長さ: {self.current_track_length}秒)")
-            except:
-                self.current_track_length = 0
-                self.total_time_label.config(text="00:00")
-                self.current_track_label.config(text=f"再生中の曲: {os.path.basename(self.playlist[self.current_track])}")
-                print(f"再生曲情報: {os.path.basename(self.playlist[self.current_track])} (メタデータ取得失敗)")
-            
-            # 再生位置をリセット
-            self.current_position = 0
-            self.last_update_time = time.time()
-            
-            # 現在のトラックを選択状態にする
-            self.tree.selection_set(self.tree.get_children()[self.current_track])
-            self.update_playing_mark()  # 再生中マークを更新
-    
-    def toggle_play(self):
-        if pygame.mixer.music.get_busy():
-            pygame.mixer.music.pause()
-            if self.play_icon:
-                self.play_button.configure(image=self.play_icon)
-            else:
-                self.play_button.configure(text="再生")
-            self.is_paused = True
-        else:
-            if self.is_paused:
-                pygame.mixer.music.unpause()
-                self.last_update_time = time.time()
-            else:
-                if self.playlist:
-                    self.play_track()
+            self.is_paused = False
+            # アイコンを一時停止用に変更
             if self.pause_icon:
                 self.play_button.configure(image=self.pause_icon)
             else:
                 self.play_button.configure(text="一時停止")
+            
+            # 曲の長さを取得
+            audio = MP3(self.playlist[self.current_track])
+            self.current_track_length = audio.info.length
+            
+            # 曲名を表示
+            try:
+                tags = ID3(self.playlist[self.current_track])
+                title = str(tags.get('TIT2', [''])[0])
+                artist = str(tags.get('TPE1', [''])[0])
+                if not title:
+                    title = os.path.basename(self.playlist[self.current_track])
+                if not artist:
+                    artist = "Unknown Artist"
+            except:
+                title = os.path.basename(self.playlist[self.current_track])
+                artist = "Unknown Artist"
+            
+            self.current_track_label.config(text=f"再生中の曲: {title} - {artist}")
+            
+            # 再生中マークを更新
+            self.update_playing_mark()
+            
+        except Exception as e:
+            print(f"曲の再生中にエラーが発生しました: {e}")
+            # エラーが発生した場合は、アイコンを再生用に変更
+            self.is_paused = True
+            if self.play_icon:
+                self.play_button.configure(image=self.play_icon)
+            else:
+                self.play_button.configure(text="再生")
+    
+    def toggle_play(self):
+        """再生/一時停止を切り替える"""
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
+        if self.is_paused:
+            pygame.mixer.music.unpause()
             self.is_paused = False
+            # アイコンを一時停止用に変更
+            if self.pause_icon:
+                self.play_button.configure(image=self.pause_icon)
+            else:
+                self.play_button.configure(text="一時停止")
+        else:
+            pygame.mixer.music.pause()
+            self.is_paused = True
+            # アイコンを再生用に変更
+            if self.play_icon:
+                self.play_button.configure(image=self.play_icon)
+            else:
+                self.play_button.configure(text="再生")
     
     def next_track(self):
-        print(f"次の曲へ (再生状態: {'一時停止中' if self.is_paused else '再生中' if pygame.mixer.music.get_busy() else '停止中'})")
-        if self.playlist:
-            self.current_track = (self.current_track + 1) % len(self.playlist)
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
+        if self.current_track < len(self.playlist) - 1:
+            self.current_track += 1
             self.current_position = 0
             self.last_update_time = time.time()
             self.progress_var.set(0)
             self.play_track()
     
     def prev_track(self):
-        print(f"前の曲へ (再生状態: {'一時停止中' if self.is_paused else '再生中' if pygame.mixer.music.get_busy() else '停止中'})")
-        if self.playlist:
-            self.current_track = (self.current_track - 1) % len(self.playlist)
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
+        if self.current_track > 0:
+            self.current_track -= 1
             self.current_position = 0
             self.last_update_time = time.time()
             self.progress_var.set(0)
             self.play_track()
     
     def on_enter_key(self, event):
-        # Enterキーの処理
+        """Enterキーで選択された曲を先頭から再生する"""
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
         selection = self.tree.selection()
-        if selection:
+        if not selection:  # 選択されていない場合は何もしない
+            return
+        
+        try:
+            # 選択された曲を再生
             selected_index = self.tree.index(selection[0])
+            self.current_track = selected_index
+            self.current_position = 0  # 再生位置をリセット
+            self.last_update_time = time.time()  # 更新時間をリセット
+            self.progress_var.set(0)  # プログレスバーをリセット
+            self.current_time_label.config(text="00:00")  # 時間表示をリセット
+            self.play_track()
             
-            # 選択された曲が現在再生中の曲と同じ場合
-            if selected_index == self.current_track and pygame.mixer.music.get_busy():
+        except Exception as e:
+            print(f"Enterキーの処理中にエラーが発生しました: {e}")
+    
+    def on_delete_key(self, event):
+        """Deleteキーで選択された曲を削除"""
+        if not self.playlist:  # プレイリストが空の場合は何もしない
+            return
+        
+        selection = self.tree.selection()
+        if not selection:  # 選択されていない場合は何もしない
+            return
+        
+        try:
+            # 選択されたアイテムのインデックスを取得
+            selected_item = selection[0]
+            selected_index = self.tree.index(selected_item)
+            
+            # 選択された曲が現在再生中の曲の場合
+            if selected_index == self.current_track:
                 # 再生を停止
                 pygame.mixer.music.stop()
                 self.play_button.config(text="再生")
+                self.is_paused = True
+            
+            # 曲をプレイリストから削除
+            del self.playlist[selected_index]
+            self.tree.delete(selected_item)  # 選択されたアイテムを削除
+            
+            # 現在の再生位置を更新
+            if self.current_track >= len(self.playlist):
+                self.current_track = max(0, len(self.playlist) - 1)
+            
+            # プレイリストが空になった場合
+            if not self.playlist:
+                self.current_track = 0
+                self.current_track_length = 0
+                self.current_position = 0
+                self.progress_var.set(0)
+                self.current_time_label.config(text="00:00")
+                self.total_time_label.config(text="00:00")
+                self.current_track_label.config(text="再生中の曲: ")
             else:
-                # 選択された曲を再生
-                self.current_track = selected_index
-                self.play_track()
-    
-    def on_delete_key(self, event):
-        # Deleteキーの処理
-        selection = self.tree.selection()
-        if selection:
-            try:
-                selected_index = self.tree.index(selection[0])
-                
-                # 選択された曲が現在再生中の曲の場合
-                if selected_index == self.current_track:
-                    # 再生を停止
-                    pygame.mixer.music.stop()
-                    self.play_button.config(text="再生")
-                    self.current_track = 0  # 最初の曲を選択
-                
-                # 曲をプレイリストから削除
-                self.tree.delete(selected_index)  # 選択されたアイテムのIDを使用
-                del self.playlist[selected_index]
-                
-                # 現在の再生位置を更新
-                if self.current_track >= len(self.playlist):
-                    self.current_track = max(0, len(self.playlist) - 1)
-                
-                # プレイリストが空になった場合
-                if not self.playlist:
-                    self.current_track = 0
-                    self.current_track_length = 0
-                    self.current_position = 0  # 再生位置をリセット
-                    self.progress_var.set(0)
-                    self.current_time_label.config(text="00:00")
-                    self.total_time_label.config(text="00:00")
-                    self.current_track_label.config(text="再生中の曲: ")
-                else:
-                    # 削除された曲の次の曲を選択（最後の曲の場合は新たな最後の曲を選択）
-                    next_index = min(selected_index, len(self.playlist) - 1)
-                    if next_index >= 0:  # インデックスが有効な場合のみ
-                        next_item = self.tree.get_children()[next_index]
-                        self.tree.selection_set(next_item)
-                        self.tree.focus(next_item)  # フォーカスを設定
-                        self.tree.see(next_item)  # 選択されたアイテムが見えるようにスクロール
-                self.update_playing_mark()  # 再生中マークを更新
-            except Exception as e:
-                print(f"曲の削除中にエラーが発生しました: {e}")
-                # エラーが発生した場合は、何もしない（1件ずつの削除に徹する）
+                # 削除された曲の次の曲を選択（最後の曲の場合は新たな最後の曲を選択）
+                next_index = min(selected_index, len(self.playlist) - 1)
+                if next_index >= 0:  # インデックスが有効な場合のみ
+                    next_item = self.tree.get_children()[next_index]
+                    self.tree.selection_set(next_item)
+                    self.tree.focus(next_item)
+                    self.tree.see(next_item)
+            
+            self.update_playing_mark()  # 再生中マークを更新
+            
+        except Exception as e:
+            print(f"曲の削除中にエラーが発生しました: {e}")
+            # エラーが発生した場合は、プレイリストを再構築
+            self.update_playlist_display()
     
     def on_up_key(self, event):
         # 上矢印キーの処理
