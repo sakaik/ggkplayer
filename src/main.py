@@ -174,7 +174,7 @@ class MusicPlayer:
         self.tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # ダブルクリックイベントの設定
-        self.tree.bind("<Double-1>", self.play_selected)
+        self.tree.bind("<Double-1>", self.on_enter_key)  # ダブルクリックでEnterキーと同じ処理を実行
         
         # キーボードイベントの設定
         self.root.bind("<Return>", self.on_enter_key)
@@ -487,7 +487,7 @@ class MusicPlayer:
                 self.tree.selection_clear()
                 # 100ms後にダブルクリックイベントを再バインド
                 print("ダブルクリックイベントを再バインド予約")
-                self.root.after(100, lambda: self.tree.bind("<Double-1>", self.play_selected))
+                self.root.after(100, lambda: self.tree.bind("<Double-1>", self.on_enter_key))
         print(f"ドラッグアンドドロップ終了 (再生状態: {'一時停止中' if self.is_paused else '再生中' if pygame.mixer.music.get_busy() else '停止中'})")
 
     def add_to_playlist(self, file_path):
